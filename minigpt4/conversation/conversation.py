@@ -116,6 +116,17 @@ CONV_VISION = Conversation(
     sep="###",
 )
 
+CONV_TEXT = Conversation(
+    system="You are a helpful, respectful and honest assistant with broad knowledge. "
+           "Answer questions accurately and in as much detail as necessary.",
+    roles=("Human", "Assistant"),
+    messages=[],
+    # offset=0: no initial image-upload messages to skip (unlike CONV_VISION which uses offset=2)
+    offset=0,
+    sep_style=SeparatorStyle.SINGLE,
+    sep="###",
+)
+
 
 
 class Chat:
