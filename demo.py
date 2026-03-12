@@ -10,7 +10,7 @@ import gradio as gr
 from minigpt4.common.config import Config
 from minigpt4.common.dist_utils import get_rank
 from minigpt4.common.registry import registry
-from minigpt4.conversation.conversation import Chat, CONV_VISION
+from minigpt4.conversation.conversation import Chat, CONV_VISION, CONV_TEXT
 
 # imports modules for registration
 from minigpt4.datasets.builders import *
@@ -73,15 +73,19 @@ def gradio_reset(chat_state, img_list):
         chat_state.messages = []
     if img_list is not None:
         img_list = []
-    return None, gr.update(value=None, interactive=True), gr.update(placeholder='Please upload your image first', interactive=False),gr.update(value="Upload & Start Chat", interactive=True), chat_state, img_list
+    return None, gr.update(value=None, interactive=True), gr.update(placeholder='Please upload your image first', interactive=False),gr.update(value="Upload & Start Chat", interactive=True), gr.update(value="Start Text Chat", interactive=True), chat_state, img_list
 
 def upload_img(gr_img, text_input, chat_state):
     if gr_img is None:
-        return None, None, gr.update(interactive=True), chat_state, None
+        return None, None, gr.update(interactive=True), gr.update(interactive=True), chat_state, None
     chat_state = CONV_VISION.copy()
     img_list = []
     llm_message = chat.upload_img(gr_img, chat_state, img_list)
-    return gr.update(interactive=False), gr.update(interactive=True, placeholder='Type and press Enter'), gr.update(value="Start Chatting", interactive=False), chat_state, img_list
+    return gr.update(interactive=False), gr.update(interactive=True, placeholder='Type and press Enter'), gr.update(value="Start Chatting", interactive=False), gr.update(interactive=False), chat_state, img_list
+
+def start_text_chat(chat_state):
+    chat_state = CONV_TEXT.copy()
+    return gr.update(interactive=True, placeholder='Type your question and press Enter'), gr.update(value="Text Chat Started", interactive=False), gr.update(interactive=False), chat_state, []
 
 def gradio_ask(user_message, chatbot, chat_state):
     if len(user_message) == 0:
@@ -91,12 +95,12 @@ def gradio_ask(user_message, chatbot, chat_state):
     return '', chatbot, chat_state
 
 
-def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature):
+def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature, max_new_tokens):
     llm_message = chat.answer(conv=chat_state,
                               img_list=img_list,
                               num_beams=num_beams,
                               temperature=temperature,
-                              max_new_tokens=300,
+                              max_new_tokens=max_new_tokens,
                               max_length=2000)[0]
     chatbot[-1][1] = llm_message
     return chatbot, chat_state, img_list
@@ -117,6 +121,7 @@ with gr.Blocks() as demo:
         with gr.Column(scale=0.5):
             image = gr.Image(type="pil")
             upload_button = gr.Button(value="Upload & Start Chat", interactive=True, variant="primary")
+            text_only_button = gr.Button(value="Start Text Chat", interactive=True, variant="secondary")
             clear = gr.Button("Restart")
             
             num_beams = gr.Slider(
@@ -137,17 +142,27 @@ with gr.Blocks() as demo:
                 label="Temperature",
             )
 
+            max_new_tokens = gr.Slider(
+                minimum=100,
+                maximum=2000,
+                value=300,
+                step=100,
+                interactive=True,
+                label="Max Output Tokens (increase for longer responses)",
+            )
+
         with gr.Column():
             chat_state = gr.State()
             img_list = gr.State()
             chatbot = gr.Chatbot(label='MiniGPT-4')
-            text_input = gr.Textbox(label='User', placeholder='Please upload your image first', interactive=False)
+            text_input = gr.Textbox(label='User', placeholder='Please upload your image first or click Start Text Chat', interactive=False)
     
-    upload_button.click(upload_img, [image, text_input, chat_state], [image, text_input, upload_button, chat_state, img_list])
+    upload_button.click(upload_img, [image, text_input, chat_state], [image, text_input, upload_button, text_only_button, chat_state, img_list])
+    text_only_button.click(start_text_chat, [chat_state], [text_input, text_only_button, upload_button, chat_state, img_list])
     
     text_input.submit(gradio_ask, [text_input, chatbot, chat_state], [text_input, chatbot, chat_state]).then(
-        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature], [chatbot, chat_state, img_list]
+        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature, max_new_tokens], [chatbot, chat_state, img_list]
     )
-    clear.click(gradio_reset, [chat_state, img_list], [chatbot, image, text_input, upload_button, chat_state, img_list], queue=False)
+    clear.click(gradio_reset, [chat_state, img_list], [chatbot, image, text_input, upload_button, text_only_button, chat_state, img_list], queue=False)
 
 demo.launch(share=True, enable_queue=True)
